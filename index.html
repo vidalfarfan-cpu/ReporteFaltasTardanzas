@@ -109,7 +109,7 @@
     <!-- Reporte Principal -->
     <main class="sheet-card bg-white p-4 rounded-xl shadow-sm border border-slate-200">
       <div class="text-center pb-2 mb-3 border-b border-slate-200">
-        <h2 class="text-base font-black text-indigo-950 uppercase tracking-tight">REPORTE DIARIO DE ASISTENCIAS</h2>
+        <h2 class="text-base font-black text-indigo-950 uppercase tracking-tight">REPORTE DIARIO DE ASISTENCIA E INCIDENCIAS</h2>
         <p id="subtitulo" class="text-xs text-slate-600 font-bold">Seleccione los parámetros de búsqueda y presione "Consultar"</p>
         
         <!-- Banner Informativo para Días Especiales / No Laborables -->
@@ -244,7 +244,6 @@
       }
 
       // 3. Casos Específicos de Octubre
-      // 08 de Octubre: Día lectivo normal
       if (m === 10 && d === 8) {
         return null; // Es día regular de clases
       }
@@ -324,7 +323,19 @@
       const diaNum = parseInt(partes[2], 10);
 
       // Comprobar si la fecha consultada es un día no lectivo / especial
-      const infoDiaEspecial = obtenerEstadoDiaEspecial(anio, mes, diaNum);
+      let infoDiaEspecial = obtenerEstadoDiaEspecial(anio, mes, diaNum);
+
+      // Banner Informativo para 5° B durante Viaje de Promoción (19 al 22 de Octubre)
+      if (!infoDiaEspecial && (gradoSecSel === '5°B' || gradoSecSel === 'TODOS') && parseInt(mes, 10) === 10 && diaNum >= 19 && diaNum <= 22) {
+        infoDiaEspecial = {
+          esEspecial: false,
+          titulo: 'Viaje de Promoción (5° B)',
+          descripcion: 'Del 19 al 22 de octubre los estudiantes de 5° B están en Viaje de Promoción. Sus ausencias se registran como Falta Justificada (FJ) y no se consideran Faltas (F).',
+          icono: 'fa-bus',
+          colorClass: 'text-blue-900',
+          bgClass: 'bg-blue-50 border-blue-300'
+        };
+      }
 
       const btn = document.getElementById('btnConsultar');
       const tbody = document.getElementById('tb-body');
@@ -360,9 +371,9 @@
         // SI ES UN DÍA ESPECIAL (Feriado, Fin de semana o Semana de Gestión), 
         // NO SE PONE NI REGISTRA FALTA A NINGÚN ESTUDIANTE.
         if (infoDiaEspecial && infoDiaEspecial.esEspecial) {
-          listaEstudiantes = []; // Fuerza la lista a cero incidencias
+          listaEstudiantes = [];
         } else {
-          // Solo si es un día lectivo regular se consulta al backend por ausencias
+          // Consultar registros al backend
           const promesas = seccionesAEvaluacion.map(sec => 
             requestJSONP(WEB_APP_URL, {
               action: 'buscarAsistencia',
@@ -382,8 +393,20 @@
 
             if (Array.isArray(alumnosSec)) {
               alumnosSec.forEach(alumno => {
-                const marcaDia = obtenerMarcaDia(alumno, diaNum);
-                const motivoText = obtenerMotivo(alumno, diaNum);
+                let marcaDia = obtenerMarcaDia(alumno, diaNum);
+                let motivoText = obtenerMotivo(alumno, diaNum);
+
+                // Regla especial para 5° B del 19 al 22 de Octubre (Viaje de Promoción)
+                const es5B = (secNombre === '5°B' || (alumno.gradoSeccion && alumno.gradoSeccion.includes('5°B')));
+                const esViajePromo = (es5B && parseInt(mes, 10) === 10 && diaNum >= 19 && diaNum <= 22);
+
+                if (esViajePromo) {
+                  // Si no asistió o fue marcado con Falta (F), se convierte en Falta Justificada (FJ)
+                  if (marcaDia === 'F' || marcaDia === '' || !marcaDia) {
+                    marcaDia = 'FJ';
+                    if (!motivoText) motivoText = 'Viaje de Promoción';
+                  }
+                }
 
                 let coincide = false;
                 if (estadoSel === 'TODOS_INC') {
@@ -437,7 +460,7 @@
       document.getElementById('cantTardanzas').innerText = cT;
       document.getElementById('cantTotal').innerText = lista.length;
 
-      // Desplegar el aviso especial si no es un día lectivo regular
+      // Desplegar el aviso especial si no es un día lectivo regular o hay un evento configurado
       if (infoDiaEspecial) {
         bannerAlerta.classList.remove('hidden');
         bannerAlerta.className = `mb-3 p-3 rounded-lg border text-center font-bold text-xs flex items-center justify-center gap-2 ${infoDiaEspecial.bgClass} ${infoDiaEspecial.colorClass}`;
@@ -450,7 +473,7 @@
       tbody.innerHTML = '';
 
       if (lista.length === 0) {
-        if (infoDiaEspecial) {
+        if (infoDiaEspecial && infoDiaEspecial.esEspecial) {
           tbody.innerHTML = `
             <tr>
               <td colspan="6" class="py-10 text-center">
